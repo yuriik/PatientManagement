@@ -1,0 +1,50 @@
+# API Dockerfile
+FROM mcr.microsoft.com/dotnet/aspnet:6.0 AS base
+WORKDIR /app
+EXPOSE 80
+EXPOSE 443
+
+FROM mcr.microsoft.com/dotnet/sdk:6.0 AS build
+WORKDIR /src
+COPY ["PatientManagement.API/PatientManagement.API.csproj", "PatientManagement.API/"]
+RUN dotnet restore "PatientManagement.API/PatientManagement.API.csproj"
+COPY . .
+WORKDIR "/src/PatientManagement.API"
+RUN dotnet build "PatientManagement.API.csproj" -c Release -o /app/build
+
+FROM build AS publish
+RUN dotnet publish "PatientManagement.API.csproj" -c Release -o /app/publish
+
+FROM base AS final
+WORKDIR /app
+COPY --from=publish /app/publish .
+ENTRYPOINT ["dotnet", "PatientManagement.API.dll"]
+
+# docker-compose.yml
+version: '3.4'
+
+services:
+  sql-server:
+    image: mcr.microsoft.com/mssql/server:2019-latest
+    environment:
+      - SA_PASSWORD=YourStrong@Passw0rd
+      - ACCEPT_EULA=Y
+    ports:
+      - "1433:1433"
+    volumes:
+      - sql-/var/opt/mssql
+
+  api:
+    build:
+      context: .
+      dockerfile: PatientManagement.API/Dockerfile
+    depends_on:
+      - sql-server
+    environment:
+      - ConnectionStrings__DefaultConnection=Server=sql-server;Database=PatientDB;User=sa;Password=YourStrong@Passw0rd;TrustServerCertificate=True
+    ports:
+      - "8080:80"
+      - "8081:443"
+
+volumes:
+  sql-
